@@ -1,0 +1,83 @@
+name: Bulk Tag Readwise Articles
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Number of articles to tag"
+        required: false
+        default: "100"
+        type: string
+      location:
+        description: "Reader location"
+        required: false
+        default: "later"
+        type: choice
+        options:
+          - later
+          - archive
+          - new
+          - feed
+      all:
+        description: "Tag ALL untagged articles (ignores limit)"
+        required: false
+        default: false
+        type: boolean
+      retag:
+        description: "Re-tag articles that already have tags"
+        required: false
+        default: false
+        type: boolean
+      dry_run:
+        description: "Preview tags without applying them"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  tag-articles:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run bulk tagger
+        env:
+          READWISE_TOKEN: ${{ secrets.READWISE_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          # Build args from workflow inputs (or defaults for scheduled runs)
+          ARGS=""
+
+          LIMIT="${{ github.event.inputs.limit || '100' }}"
+          ARGS="$ARGS --limit $LIMIT"
+
+          LOCATION="${{ github.event.inputs.location || 'later' }}"
+          ARGS="$ARGS --location $LOCATION"
+
+          if [ "${{ github.event.inputs.all }}" = "true" ]; then
+            ARGS="$ARGS --all"
+          fi
+
+          if [ "${{ github.event.inputs.retag }}" = "true" ]; then
+            ARGS="$ARGS --retag"
+          fi
+
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+
+          echo "Running: python bulk_tagger.py $ARGS"
+          python bulk_tagger.py $ARGS
