@@ -119,16 +119,26 @@ def readwise_get(path, params=None):
 
 
 def add_tags_to_document(doc_id, tag_names):
-    """Add tags via the CLI."""
-    result = subprocess.run(
-        ["npx", "@readwise/cli", "reader-add-tags-to-document",
-         "--document-id", doc_id, "--tag-names", ",".join(tag_names)],
-        capture_output=True, text=True,
-    )
-    return result.returncode == 0
-
-
-import subprocess
+    """Add tags via the Readwise Reader API."""
+    url = f"{READWISE_BASE}/update/{doc_id}/"
+    data = json.dumps({"tags": tag_names}).encode()
+    req = urllib.request.Request(url, data=data, method="PATCH", headers={
+        "Authorization": f"Token {os.environ['READWISE_TOKEN']}",
+        "Content-Type": "application/json",
+    })
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(req) as r:
+                return r.status == 200
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                wait = min(2 ** attempt * 3, 30)
+                print(f" [tag 429, wait {wait}s]", end="", flush=True)
+                time.sleep(wait)
+            else:
+                print(f" [tag error {e.code}]", end="", flush=True)
+                return False
+    return False
 
 
 def fetch_untagged_articles(location, limit, retag=False):
